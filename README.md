@@ -1,4 +1,5 @@
 # Optimized Traffic Light with Computer Vision
+![Static Badge](https://img.shields.io/badge/status-Work_in_Progress-blue)
 Designing an Optimized Traffic Light Control System using a hybrid of Image Classification and Object Detection
 ## Overview
 
@@ -29,4 +30,4 @@ pipenv install
 ## Miniature
 <img src="/assets/miniature.png" alt="miniature"/>
 
-(on progress)
+(in progress)
