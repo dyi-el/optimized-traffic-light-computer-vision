@@ -15,6 +15,11 @@ To install the dependencies with pipenv:
 pipenv install
 ```
 
+## Instructions
+1. Use desired microprocessor. This project uses Beaglebone Black and Arduino. Install the desired packages to control GPIO pins. For Arduino, StandardPyFirmata was installed.
+2.
+3.
+
 ## Framework
 <img src="/assets/framework.png" alt="framework"/>
 

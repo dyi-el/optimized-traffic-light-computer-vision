@@ -15,6 +15,7 @@ pillow = "*"
 matplotlib = "*"
 pandas = "*"
 scipy = "*"
+pyfirmata = "*"
 
 [dev-packages]
 ipykernel = "*"
