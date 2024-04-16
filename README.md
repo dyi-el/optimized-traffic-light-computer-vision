@@ -1,10 +1,11 @@
 # Optimized Traffic Light with Computer Vision
 ![Static Badge](https://img.shields.io/badge/status-Work_in_Progress-blue)
+
 Designing an Optimized Traffic Light Control System using a hybrid of Image Classification and Object Detection
 ## Overview
 
 
-This is the codebase of a college academic capstone research *(on going)*. It uses YOLO and EfficientNet to train the models to be used for inferencing
+This is the codebase of a college academic capstone research *(on going)*. It uses YOLOv8 to train the models to be used for inferencing.
 
 ## Requirements
 
@@ -16,23 +17,20 @@ pipenv install
 ```
 
 ## Instructions
-1. Use desired microprocessor. This project uses Beaglebone Black and Arduino. Install the desired packages to control GPIO pins. For Arduino, StandardPyFirmata was installed.
-2. 
-3.
+1. Install requirements through the Pipfile.
+2. Use desired microprocessor. This project uses Beaglebone Black and Arduino. Install the desired packages to control GPIO pins. For Arduino, StandardPyFirmata was installed.
+3. Copy and run traffic-light.py on microprocessor and connect pins with the arduino. Be sure to keep check HIGH voltage levels of devices. (Arduino=5V, RPi,BBB=3.3V)
+4. Activate the virtual shell environment of pipenv.
+```bash
+pipenv shell
+```
+5. Run actuator.py on shell. Using your computer.
 
-## Framework
-<img src="/assets/framework.png" alt="framework"/>
 
-## Block Diagram
+
+## Connections Diagram
+
 <img src="/assets/block.png" alt="block"/>
 
-## Inference
-<img src="/assets/inference.png" alt="inference"/>
-
-## Controller
-<img src="/assets/controller.png" alt="controller"/>
-
-## Miniature
-<img src="/assets/miniature.png" alt="miniature"/>
 
 (in progress)
