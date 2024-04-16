@@ -1,6 +1,17 @@
+# Related dataset files for testing locally
 dataset
 dataset.yaml
-runs
+
+# YOLOv8 generated files
+runs/detect/predict
+runs/detect/predict2
+runs/classify/predict
+runs/classify/predict2
 yolov8n.pt
+yolov8n-cls.pt
+
+
 traffic-view
+
+# SECRET CODES
 secrets.txt
