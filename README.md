@@ -2,11 +2,13 @@
 ![Static Badge](https://img.shields.io/badge/status-Work_in_Progress-blue)
 
 Designing an Optimized Traffic Light Control System using a hybrid of Image Classification and Object Detection
-## Overview
+## Overview 
 
 
-This is the codebase of a college academic capstone research *(on going)*. It uses YOLOv8 to train the models to be used for inferencing.
-
+This is the codebase of a college academic capstone research *(on going)*. It uses YOLOv8 to train the models to be used for inferencing. It has proven itself good for fast and reliable inference.
+[See Ultralytics](https://github.com/ultralytics/ultralytics)
+<img src="https://raw.githubusercontent.com/ultralytics/assets/main/yolov8/yolo-comparison-plots.png" alt="block"/>
+It is also good for use to both image classification and object detection.
 ## Requirements
 
 To install the dependencies with pipenv:
