@@ -85,6 +85,7 @@ def pedestrian_phase():
                 GPIO.output(ped_red, GPIO.LOW)
                 time.sleep(0.5)
             GPIO.output(ped_red, GPIO.HIGH)
+            all_red = True
             time.sleep(2)
             print("End Pedestrian Phase")
             break
@@ -148,7 +149,7 @@ warning_timed(5)
 
 # Start RED for 5s
 init_red(3)
-
+all_red = True
 fixed_lane_time = 5
 fixed_ped_time = 7
 lanes = 4
@@ -163,7 +164,7 @@ while True:
     while GPIO.input(manual) == 1:
         if GPIO.input(nextlane) == 1:
             print("Currently on Manual Mode")
-            
+                
             current_lane = (current_lane + 1) % 4
             print("Next Lane ", str(current_lane+1)," signal")
             red = current_lane * (lanes-1)
@@ -173,16 +174,26 @@ while True:
             prev_yellow = ((current_lane+3)%4) * (lanes-1) + 1
             prev_green = ((current_lane+3)%4) * (lanes-1) + 2
             
-            GPIO.output(leds[prev_red], GPIO.LOW)
-            GPIO.output(leds[prev_green], GPIO.LOW)
-            GPIO.output(leds[prev_yellow], GPIO.HIGH)
-            time.sleep(3)
-            GPIO.output(leds[prev_yellow], GPIO.LOW)
-            GPIO.output(leds[prev_red], GPIO.HIGH)
+            if all_red == True:
+                print("ALL RED SEQUENCE")
+                GPIO.output(leds[red], GPIO.LOW)
+                GPIO.output(leds[green], GPIO.HIGH)
+                time.sleep(3)
+                all_red = False
+                
+            else:
+                GPIO.output(leds[prev_red], GPIO.LOW)
+                GPIO.output(leds[prev_green], GPIO.LOW)
+                GPIO.output(leds[prev_yellow], GPIO.HIGH)
+                time.sleep(3)
+                GPIO.output(leds[prev_yellow], GPIO.LOW)
+                GPIO.output(leds[prev_red], GPIO.HIGH)
+            
+                GPIO.output(leds[red], GPIO.LOW)
+                GPIO.output(leds[green], GPIO.HIGH)
+                
             
             
-            GPIO.output(leds[red], GPIO.LOW)
-            GPIO.output(leds[green], GPIO.HIGH)
             
             
         if GPIO.input(pedestrian) == 1:
@@ -196,6 +207,10 @@ while True:
             prev_yellow = ((current_lane+3)%4) * (lanes-1) + 1
             prev_green = ((current_lane+3)%4) * (lanes-1) + 2
             
+            if all_red == True:
+                print("ALL RED PEDESTRIAN")
+                init_pedestrian()
+                
             GPIO.output(leds[prev_red], GPIO.LOW)
             GPIO.output(leds[prev_green], GPIO.LOW)
             GPIO.output(leds[prev_yellow], GPIO.HIGH)
@@ -203,9 +218,10 @@ while True:
             GPIO.output(leds[prev_yellow], GPIO.LOW)
             GPIO.output(leds[prev_red], GPIO.HIGH)
             init_pedestrian()
-            
+
         if GPIO.input(warning) == 1:
             init_warning()
+            all_red = True
     
        
     # Automatic Actuation Mode         
@@ -225,8 +241,35 @@ while True:
     GPIO.output(leds[yellow], GPIO.LOW)
     
     GPIO.output(leds[red], GPIO.HIGH)
+    all_red = True
     current_lane = (current_lane + 1) % 4
     
 
-    
+'''
+For Beaglebone Black
+
+1. Navigate to User Home Directory
+cd ~
+ 
+2. Show current directory
+pwd
+
+3. Write the program
+nano traffic-light.py 
+
+4. Test the program
+sudo python blink.py
+
+5. Edit Cron file
+sudo crontab -e
+
+6. Add the config line
+@reboot python /home/debian/traffic-light.py &
+
+7. Find the process
+ps aux | grep /home/debian/traffic-light.py
+
+8. End the process
+sudo kill [PROCESS ID]
+'''    
     
