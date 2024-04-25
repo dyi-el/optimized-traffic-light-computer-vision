@@ -18,7 +18,6 @@ from ultralytics.utils.plotting import Annotator, colors
 
 max_lane_signal_time = 30           # Maximum time per lane
 total_lane_signal_time = 0
-total_time_added = 0                # Initialize object detection added time
 start_lane_time = time.time()
 next_lane_go = False                # Next lane condition
 
@@ -27,6 +26,9 @@ start_pedestrian_wait_time = 0
 pedestrian_count = 0
 pedestrian_go = False               # Pedestrian condition
 pedestrian_detected = False         # Condition for starting pedestrian wait time
+
+detect_added = 0                # Initialize object detection added time
+classify_added = 10
 
 track_history = defaultdict(list)
 
@@ -50,24 +52,37 @@ counting_regions = [
     },
 ]
 
-def next_lane_signal(total_time_added):
-    global total_lane_signal_time, next_lane_go, start_lane_time
+def next_lane_signal(detect_added, classify_added, results_cls, top5_labels, top5_conf_np):
+    global total_lane_signal_time, next_lane_go, start_lane_time, fire_detected, accident_detected
     
     
-    total_lane_signal_time = total_time_added
-    print(f"total_lane_signal_time: {total_lane_signal_time}")
+    for r in results_cls:
+        # Iterate over each class in the classification results
+        for label, prob in zip(top5_labels, top5_conf_np):
+            # Apply conditions based on class probabilities
+            if label == "sparse_traffic" and prob > 0.80:
+                classify_added *= 0.5
+            elif label == "dense_traffic" and prob > 0.30:
+                classify_added *= 1.2
+            elif label == "fire" and prob > 0.50:
+                fire_detected = True
+            elif label == "accident" and prob > 0.50:
+                accident_detected = True
+                
+    total_lane_signal_time = detect_added + classify_added
     
-
-
     lane_elapsed_time = time.time() - start_lane_time
-    print(f"elapsed_lane_time: {lane_elapsed_time}")
-        
+    
+    
     if (max_lane_signal_time or total_lane_signal_time) <= lane_elapsed_time:
         next_lane_go = True
         print("Next lane signal: Go")
+        return total_lane_signal_time, lane_elapsed_time
     else:
         print("Next lane signal: Stop")
-
+        return total_lane_signal_time, lane_elapsed_time
+    
+    
 
 def pedestrian_signal(pedestrian_count):
     global start_pedestrian_wait_time, pedestrian_go, pedestrian_detected
@@ -129,7 +144,8 @@ def run(
     region_thickness=4,
 ):
     
-    global total_lane_signal_time, next_lane_go, pedestrian_go, start_pedestrian_wait_time, total_time_added, pedestrian_count, start_lane_time
+    global total_lane_signal_time, next_lane_go, pedestrian_go, start_pedestrian_wait_time, detect_added
+    global classify_added, pedestrian_count, start_lane_time, fire_detected, accident_detected
     
     vid_frame_count = 0
 
@@ -221,7 +237,7 @@ def run(
                         region["counts"] += 1
 
 
-                total_time_added = sum(classes_with_multiplier.values())
+                detect_added = sum(classes_with_multiplier.values())
 
         # Draw regions (Polygons/Rectangles)
         for region in counting_regions:
@@ -233,7 +249,7 @@ def run(
                 else:
                     region_label = "Person Count: 0"
             else:
-                region_label = f"Time Added: {total_time_added:.2f}"
+                region_label = f"Time Added: {detect_added:.2f}"
 
             region_color = region["region_color"]
             region_text_color = region["text_color"]
@@ -259,6 +275,20 @@ def run(
             )
             cv2.polylines(frame, [polygon_coords], isClosed=True, color=region_color, thickness=region_thickness)
 
+        
+        
+        total_time, elapsed_time = next_lane_signal(detect_added, classify_added, results_cls, top5_labels, top5_conf_np)
+        print("Total time:", total_time)
+        print("Elapsed time:", elapsed_time)
+        text_total = f"Total Optimized Time: {total_time:.2f}"
+        text_elapsed = f"Elapsed Time: {elapsed_time:.2f}"
+        
+        cv2.putText(frame, text_total, (700, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2)
+        cv2.putText(frame, text_elapsed, (700, 80), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2)
+        
+        pedestrian_signal(pedestrian_count)
+        
+        
         if not hide_img:
             if vid_frame_count == 1:
                 cv2.namedWindow("Optimized Traffic Light Inference Mode")
@@ -270,9 +300,6 @@ def run(
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
-        
-        next_lane_signal(total_time_added)
-        pedestrian_signal(pedestrian_count)
 
     del vid_frame_count
     videocapture.release()
