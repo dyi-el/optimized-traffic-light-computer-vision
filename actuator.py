@@ -3,6 +3,7 @@
 import argparse
 from collections import defaultdict
 from pathlib import Path
+import time
 
 import cv2
 import numpy as np
@@ -13,13 +14,27 @@ from ultralytics import YOLO
 from ultralytics.utils.files import increment_path
 from ultralytics.utils.plotting import Annotator, colors
 
+
+
+max_lane_signal_time = 30           # Maximum time per lane
+total_lane_signal_time = 0
+total_time_added = 0                # Initialize object detection added time
+start_lane_time = time.time()
+next_lane_go = False                # Next lane condition
+
+max_pedestrian_wait_time = 10       # Maximum pedestrian wait time before crossing 
+start_pedestrian_wait_time = 0
+pedestrian_count = 0
+pedestrian_go = False               # Pedestrian condition
+pedestrian_detected = False         # Condition for starting pedestrian wait time
+
 track_history = defaultdict(list)
 
-current_region = None
+start_region = None
 counting_regions = [
     {
         "name": "Pedestrian Region",
-        "polygon": Polygon([(50, 80), (250, 20), (450, 80), (400, 350), (100, 350)]), # Polygon points
+        "polygon": Polygon([(900, 700), (1200, 700), (1200, 500), (900, 500)]), # Polygon points
         "counts": 0,
         "dragging": False,
         "region_color": (255, 155, 100),  # BGR Value
@@ -27,7 +42,7 @@ counting_regions = [
     },
     {
         "name": "Multiplier Region",
-        "polygon": Polygon([(200, 250), (440, 250), (440, 800), (200, 800)]),  # Polygon points
+        "polygon": Polygon([(400, 650), (700, 650), (650, 50), (500, 50)]),  # Polygon points
         "counts": 0,
         "dragging": False,
         "region_color": (100, 200, 255),  # BGR Value
@@ -35,48 +50,86 @@ counting_regions = [
     },
 ]
 
+def next_lane_signal(total_time_added):
+    global total_lane_signal_time, next_lane_go, start_lane_time
+    
+    
+    total_lane_signal_time = total_time_added
+    print(f"total_lane_signal_time: {total_lane_signal_time}")
+    
+
+
+    lane_elapsed_time = time.time() - start_lane_time
+    print(f"elapsed_lane_time: {lane_elapsed_time}")
+        
+    if (max_lane_signal_time or total_lane_signal_time) <= lane_elapsed_time:
+        next_lane_go = True
+        print("Next lane signal: Go")
+    else:
+        print("Next lane signal: Stop")
+
+
+def pedestrian_signal(pedestrian_count):
+    global start_pedestrian_wait_time, pedestrian_go, pedestrian_detected
+    
+    if not pedestrian_detected:
+        if pedestrian_count >= 3:
+            start_pedestrian_wait_time = time.time()  # Start the pedestrian wait time counter
+            print("Pedestrian wait time started")
+            pedestrian_detected = True
+        else:
+            print("Pedestrian signal: Stop")
+    else:
+        pedestrian_elapsed_time = time.time() - start_pedestrian_wait_time
+        print(f"elapsed_pedestrian_time: {pedestrian_elapsed_time}")
+        
+        if max_pedestrian_wait_time <= pedestrian_elapsed_time or pedestrian_count > 7:
+            pedestrian_go = True
+            print("Pedestrian signal: Go")
+        else:
+            print("Pedestrian signal: Stop")
+
 
 def mouse_callback(event, x, y, flags, param):
 
-    global current_region
+    global start_region
 
     # Mouse left button down event
     if event == cv2.EVENT_LBUTTONDOWN:
         for region in counting_regions:
             if region["polygon"].contains(Point((x, y))):
-                current_region = region
-                current_region["dragging"] = True
-                current_region["offset_x"] = x
-                current_region["offset_y"] = y
+                start_region = region
+                start_region["dragging"] = True
+                start_region["offset_x"] = x
+                start_region["offset_y"] = y
 
     # Mouse move event
     elif event == cv2.EVENT_MOUSEMOVE:
-        if current_region is not None and current_region["dragging"]:
-            dx = x - current_region["offset_x"]
-            dy = y - current_region["offset_y"]
-            current_region["polygon"] = Polygon(
-                [(p[0] + dx, p[1] + dy) for p in current_region["polygon"].exterior.coords]
+        if start_region is not None and start_region["dragging"]:
+            dx = x - start_region["offset_x"]
+            dy = y - start_region["offset_y"]
+            start_region["polygon"] = Polygon(
+                [(p[0] + dx, p[1] + dy) for p in start_region["polygon"].exterior.coords]
             )
-            current_region["offset_x"] = x
-            current_region["offset_y"] = y
+            start_region["offset_x"] = x
+            start_region["offset_y"] = y
 
     # Mouse left button up event
     elif event == cv2.EVENT_LBUTTONUP:
-        if current_region is not None and current_region["dragging"]:
-            current_region["dragging"] = False
+        if start_region is not None and start_region["dragging"]:
+            start_region["dragging"] = False
 
 
 def run(
-    weights="yolov8n.pt",
     source=None,
     device="cpu",
-    view_img=False,
-    save_img=False,
-    exist_ok=False,
+    hide_img=False,
     line_thickness=2,
     track_thickness=2,
     region_thickness=4,
 ):
+    
+    global total_lane_signal_time, next_lane_go, pedestrian_go, start_pedestrian_wait_time, total_time_added, pedestrian_count, start_lane_time
     
     vid_frame_count = 0
 
@@ -85,21 +138,18 @@ def run(
         raise FileNotFoundError(f"Source path '{source}' does not exist.")
 
     # Setup Model
-    model = YOLO(f"{weights}")
+    model = YOLO("runs/detect/train3/weights/best.pt")
     model.to("cuda") if device == "0" else model.to("cpu")
-
+    
+    model_cls = YOLO("runs/classify/train2/weights/best.pt")
+    model_cls.to("cuda") if device == "0" else model_cls.to("cpu")
+    
     # Extract classes names
     names = model.model.names
+    names_cls = model_cls.model.names
 
     # Video setup
     videocapture = cv2.VideoCapture(source)
-    frame_width, frame_height = int(videocapture.get(3)), int(videocapture.get(4))
-    fps, fourcc = int(videocapture.get(5)), cv2.VideoWriter_fourcc(*"mp4v")
-
-    # Output setup
-    save_dir = increment_path(Path("ultralytics_rc_output") / "exp", exist_ok)
-    save_dir.mkdir(parents=True, exist_ok=True)
-    video_writer = cv2.VideoWriter(str(save_dir / f"{Path(source).stem}.mp4"), fourcc, fps, (frame_width, frame_height))
 
     # Iterate over video frames
     while videocapture.isOpened():
@@ -110,6 +160,24 @@ def run(
 
         # Extract the results
         results = model.track(frame, persist=True, classes=None)
+        results_cls = model_cls(frame)
+        
+        
+        # Classification results
+        for r in results_cls:
+            # Convert the tensor to a numpy array
+            top5_conf_np = r.probs.top5conf.numpy()
+            
+            # Get the top 5 class names
+            top5_labels = [names_cls[i] for i in r.probs.top5]
+
+            # Display class names and probabilities
+            y_offset = 50
+            for label, prob in zip(top5_labels, top5_conf_np):
+                text = f"{label}: {prob:.2f}"
+                cv2.putText(frame, text, (50, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+                y_offset += 30
+            
 
         if results[0].boxes.id is not None:
             boxes = results[0].boxes.xyxy.cpu()
@@ -137,15 +205,15 @@ def run(
                     if region["name"] == "Multiplier Region" and region["polygon"].contains(Point((bbox_center[0], bbox_center[1]))):
                         # Apply multipliers based on class
                         if cls == 0:  # bicycle
-                            classes_with_multiplier['bicycle'] += 0.5
+                            classes_with_multiplier['bicycle'] += 2
                         elif cls == 1:  # bus
-                            classes_with_multiplier['bus'] += 1.5
+                            classes_with_multiplier['bus'] += 5
                         elif cls == 2:  # car
-                            classes_with_multiplier['car'] += 1
+                            classes_with_multiplier['car'] += 3
                         elif cls == 3:  # motorcycle
-                            classes_with_multiplier['motorcycle'] += 0.7
+                            classes_with_multiplier['motorcycle'] += 2
                         elif cls == 5:  # truck
-                            classes_with_multiplier['truck'] += 2
+                            classes_with_multiplier['truck'] += 7
                 
                 # Check if detection inside polygon region 
                 for region in counting_regions:
@@ -153,20 +221,19 @@ def run(
                         region["counts"] += 1
 
 
-                total_time = sum(classes_with_multiplier.values())
+                total_time_added = sum(classes_with_multiplier.values())
 
         # Draw regions (Polygons/Rectangles)
         for region in counting_regions:
             region_label = ""
             if region["name"] == "Pedestrian Region":
-                # Only show label for 'person' counts in polygon region
                 if region["counts"] > 0:
                     region_label = f"Person Count: {region['counts']}"
+                    pedestrian_count = region['counts']
                 else:
                     region_label = "Person Count: 0"
             else:
-                # Show total time label for other regions
-                region_label = f"Time Added: {total_time:.2f}"
+                region_label = f"Time Added: {total_time_added:.2f}"
 
             region_color = region["region_color"]
             region_text_color = region["text_color"]
@@ -192,23 +259,22 @@ def run(
             )
             cv2.polylines(frame, [polygon_coords], isClosed=True, color=region_color, thickness=region_thickness)
 
-        if view_img:
+        if not hide_img:
             if vid_frame_count == 1:
                 cv2.namedWindow("Optimized Traffic Light Inference Mode")
                 cv2.setMouseCallback("Optimized Traffic Light Inference Mode", mouse_callback)
             cv2.imshow("Optimized Traffic Light Inference Mode", frame)
-
-        if save_img:
-            video_writer.write(frame)
 
         for region in counting_regions:  # Reinitialize count for each region
             region["counts"] = 0
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
+        
+        next_lane_signal(total_time_added)
+        pedestrian_signal(pedestrian_count)
 
     del vid_frame_count
-    video_writer.release()
     videocapture.release()
     cv2.destroyAllWindows()
 
@@ -216,15 +282,10 @@ def run(
 def parse_opt():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("--weights", type=str, default="yolov8n.pt", help="initial weights path")
     parser.add_argument("--device", default="", help="cuda device, i.e. 0 or 0,1,2,3 or cpu")
     parser.add_argument("--source", type=str, required=True, help="video file path")
-    parser.add_argument("--view-img", action="store_true", help="show results")
-    parser.add_argument("--save-img", action="store_true", help="save results")
-    parser.add_argument("--exist-ok", action="store_true", help="existing project/name ok, do not increment")
-    parser.add_argument("--line-thickness", type=int, default=2, help="bounding box thickness")
-    parser.add_argument("--track-thickness", type=int, default=2, help="Tracking line thickness")
-    parser.add_argument("--region-thickness", type=int, default=4, help="Region thickness")
+    parser.add_argument("--hide-img", action="store_true", help="hide results")
+
 
     return parser.parse_args()
 
@@ -239,6 +300,6 @@ if __name__ == "__main__":
     main(opt)
 
 
-# python actuator.py --source "traffic-view/AUP-1.mp4" --weights "runs/detect/train3/weights/best.pt" --view-img
+# python actuator.py --source "traffic-view/AUP-1.mp4"
 
 # {0: 'bicycle', 1: 'bus', 2: 'car', 3: 'motorcycle', 4: 'person', 5: 'truck'}
