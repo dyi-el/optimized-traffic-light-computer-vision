@@ -16,20 +16,6 @@ from ultralytics.utils.plotting import Annotator, colors
 
 
 
-max_lane_signal_time = 30           # Maximum time per lane
-total_lane_signal_time = 0
-start_lane_time = time.time()
-next_lane_go = False                # Next lane condition
-
-max_pedestrian_wait_time = 10       # Maximum pedestrian wait time before crossing 
-start_pedestrian_wait_time = 0
-pedestrian_count = 0
-pedestrian_go = False               # Pedestrian condition
-pedestrian_detected = False         # Condition for starting pedestrian wait time
-
-detect_added = 0                # Initialize object detection added time
-classify_added = 10
-
 track_history = defaultdict(list)
 
 start_region = None
@@ -51,6 +37,27 @@ counting_regions = [
         "text_color": (0, 0, 0),  # Region Text Color
     },
 ]
+
+def reset_variables():
+    """Reset or reinitialize variables."""
+    global max_lane_signal_time, total_lane_signal_time, start_lane_time, next_lane_go
+    global max_pedestrian_wait_time, start_pedestrian_wait_time, pedestrian_count
+    global pedestrian_go, pedestrian_detected, detect_added, classify_added
+    
+    max_lane_signal_time = 30
+    total_lane_signal_time = 0
+    start_lane_time = time.time()
+    next_lane_go = False
+
+    max_pedestrian_wait_time = 10
+    start_pedestrian_wait_time = 0
+    pedestrian_count = 0
+    pedestrian_go = False
+    pedestrian_detected = False
+
+    detect_added = 0
+    classify_added = 10
+    
 
 def next_lane_signal(detect_added, classify_added, results_cls, top5_labels, top5_conf_np):
     global total_lane_signal_time, next_lane_go, start_lane_time, fire_detected, accident_detected
@@ -155,11 +162,12 @@ def run(
 
     # Setup Model
     model = YOLO("runs/detect/train3/weights/best.pt")
-    model.to("cuda") if device == "0" else model.to("cpu")
+    model.to("cuda") if device == "0" else model.to(device)
     
     model_cls = YOLO("runs/classify/train2/weights/best.pt")
-    model_cls.to("cuda") if device == "0" else model_cls.to("cpu")
+    model_cls.to("cuda") if device == "0" else model_cls.to(device)
     
+
     # Extract classes names
     names = model.model.names
     names_cls = model_cls.model.names
@@ -182,7 +190,7 @@ def run(
         # Classification results
         for r in results_cls:
             # Convert the tensor to a numpy array
-            top5_conf_np = r.probs.top5conf.numpy()
+            top5_conf_np = r.probs.top5conf
             
             # Get the top 5 class names
             top5_labels = [names_cls[i] for i in r.probs.top5]
@@ -309,8 +317,7 @@ def run(
 def parse_opt():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", default="", help="cuda device, i.e. 0 or 0,1,2,3 or cpu")
-    parser.add_argument("--source", type=str, required=True, help="video file path")
+    parser.add_argument("--device", default="cpu", help="cuda device, cpu or mps")
     parser.add_argument("--hide-img", action="store_true", help="hide results")
 
 
@@ -319,7 +326,18 @@ def parse_opt():
 
 def main(opt):
     """Main function."""
-    run(**vars(opt))
+    # List of source paths
+    source_list = [
+        "traffic-view/AUP-1.mp4",
+        "traffic-view/AUP-2.mp4",
+        "traffic-view/AUP-Night-1.mp4",
+        "traffic-view/AUP-Night-2.mp4"
+    ]
+    
+    for source_path in source_list:
+        reset_variables() 
+        opt.source = source_path
+        run(**vars(opt))
 
 
 if __name__ == "__main__":
@@ -327,6 +345,6 @@ if __name__ == "__main__":
     main(opt)
 
 
-# python actuator.py --source "traffic-view/AUP-1.mp4"
+# python actuator.py --source "traffic-view/AUP-1.mp4" --device "mps"
 
 # {0: 'bicycle', 1: 'bus', 2: 'car', 3: 'motorcycle', 4: 'person', 5: 'truck'}
