@@ -4,6 +4,8 @@ import argparse
 from collections import defaultdict
 from pathlib import Path
 import time
+import pyfirmata
+import asyncio
 
 import cv2
 import numpy as np
@@ -13,7 +15,6 @@ from shapely.geometry.point import Point
 from ultralytics import YOLO
 from ultralytics.utils.files import increment_path
 from ultralytics.utils.plotting import Annotator, colors
-
 
 
 track_history = defaultdict(list)
@@ -38,29 +39,71 @@ counting_regions = [
     },
 ]
 
+async def next_lane_go():
+    global board, next_source
+
+    board.digital[12].write(1)
+    await asyncio.sleep(1)
+    board.digital[12].write(0)
+    next_source = True
+ 
+async def pedestrian_go():       
+    global board, next_source
+    
+    board.digital[8].write(1)
+    await asyncio.sleep(1)
+    board.digital[8].write(0)
+    
+    await asyncio.sleep(10)
+    board.digital[8].write(1)
+    await asyncio.sleep(0.5)
+    board.digital[8].write(0)
+    
+    board.digital[12].write(1)
+    await asyncio.sleep(1)
+    board.digital[12].write(0)
+    next_source = True
+        
+async def warning_go():
+    global board, next_source
+    
+    board.digital[7].write(1)
+    await asyncio.sleep(1)
+    board.digital[7].write(0)
+    
+    await asyncio.sleep(10)
+    
+    board.digital[7].write(1)
+    await asyncio.sleep(1)
+    board.digital[7].write(0)
+    
+    next_source = True
+
+
 def reset_variables():
     """Reset or reinitialize variables."""
-    global max_lane_signal_time, total_lane_signal_time, start_lane_time, next_lane_go
+    global max_lane_signal_time, total_lane_signal_time, start_lane_time
     global max_pedestrian_wait_time, start_pedestrian_wait_time, pedestrian_count
-    global pedestrian_go, pedestrian_detected, detect_added, classify_added
+    global pedestrian_detected, detect_added, classify_added, next_source
     
-    max_lane_signal_time = 30
+    max_lane_signal_time = 80
     total_lane_signal_time = 0
     start_lane_time = time.time()
-    next_lane_go = False
+
 
     max_pedestrian_wait_time = 10
     start_pedestrian_wait_time = 0
     pedestrian_count = 0
-    pedestrian_go = False
     pedestrian_detected = False
 
     detect_added = 0
     classify_added = 10
     
+    next_source = False
+    
 
 def next_lane_signal(detect_added, classify_added, results_cls, top5_labels, top5_conf_np):
-    global total_lane_signal_time, next_lane_go, start_lane_time, fire_detected, accident_detected
+    global total_lane_signal_time, start_lane_time
     
     
     for r in results_cls:
@@ -71,28 +114,31 @@ def next_lane_signal(detect_added, classify_added, results_cls, top5_labels, top
                 classify_added *= 0.5
             elif label == "dense_traffic" and prob > 0.30:
                 classify_added *= 1.2
-            elif label == "fire" and prob > 0.50:
-                fire_detected = True
-            elif label == "accident" and prob > 0.50:
-                accident_detected = True
+            elif label == "fire" and prob > 0.60:
+                #cv2.putText(frame,"WARNING", (600, 300), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 140, 255), 2)
+                #asyncio.run(warning_go())
+                continue
+            elif label == "accident" and prob > 0.60:
+                #cv2.putText(frame,"WARNING", (600, 300), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 140, 255), 2)
+                #asyncio.run(warning_go())
+                continue               
                 
     total_lane_signal_time = detect_added + classify_added
     
     lane_elapsed_time = time.time() - start_lane_time
     
     
-    if (max_lane_signal_time or total_lane_signal_time) <= lane_elapsed_time:
-        next_lane_go = True
-        print("Next lane signal: Go")
+    if min(max_lane_signal_time, total_lane_signal_time) <= lane_elapsed_time:
+        #cv2.putText(frame,"Next Lane", (600, 300), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 0), 2)
+        asyncio.run(next_lane_go())
         return total_lane_signal_time, lane_elapsed_time
     else:
-        print("Next lane signal: Stop")
         return total_lane_signal_time, lane_elapsed_time
     
     
 
 def pedestrian_signal(pedestrian_count):
-    global start_pedestrian_wait_time, pedestrian_go, pedestrian_detected
+    global start_pedestrian_wait_time, pedestrian_detected
     
     if not pedestrian_detected:
         if pedestrian_count >= 3:
@@ -106,10 +152,8 @@ def pedestrian_signal(pedestrian_count):
         print(f"elapsed_pedestrian_time: {pedestrian_elapsed_time}")
         
         if max_pedestrian_wait_time <= pedestrian_elapsed_time or pedestrian_count > 7:
-            pedestrian_go = True
-            print("Pedestrian signal: Go")
-        else:
-            print("Pedestrian signal: Stop")
+            #cv2.putText(frame,"Pedestrian Go", (600, 300), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 0), 2)
+            asyncio.run(pedestrian_go())
 
 
 def mouse_callback(event, x, y, flags, param):
@@ -146,13 +190,17 @@ def run(
     source=None,
     device="cpu",
     hide_img=False,
+    board_port='/dev/tty.usbmodem1401',
     line_thickness=2,
     track_thickness=2,
     region_thickness=4,
 ):
     
-    global total_lane_signal_time, next_lane_go, pedestrian_go, start_pedestrian_wait_time, detect_added
-    global classify_added, pedestrian_count, start_lane_time, fire_detected, accident_detected
+    global total_lane_signal_time, start_pedestrian_wait_time, detect_added
+    global classify_added, pedestrian_count, start_lane_time, board, next_source
+    
+    board = pyfirmata.Arduino(board_port)
+    print("Communication Successfully started")
     
     vid_frame_count = 0
 
@@ -306,6 +354,9 @@ def run(
         for region in counting_regions:  # Reinitialize count for each region
             region["counts"] = 0
 
+        if next_source:
+            break
+        
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
@@ -319,6 +370,7 @@ def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", default="cpu", help="cuda device, cpu or mps")
     parser.add_argument("--hide-img", action="store_true", help="hide results")
+    parser.add_argument("--board-port", required=True, help="ls /dev/tty.*")
 
 
     return parser.parse_args()
@@ -328,16 +380,16 @@ def main(opt):
     """Main function."""
     # List of source paths
     source_list = [
-        "traffic-view/AUP-1.mp4",
-        "traffic-view/AUP-2.mp4",
-        "traffic-view/AUP-Night-1.mp4",
-        "traffic-view/AUP-Night-2.mp4"
+        "traffic-view/Paseo-1.mp4",
+        "traffic-view/Paseo-2.mp4",
+        "traffic-view/Paseo-3.mp4",
+        "traffic-view/Paseo-4.mp4"
     ]
-    
-    for source_path in source_list:
-        reset_variables() 
-        opt.source = source_path
-        run(**vars(opt))
+    while True:
+        for source_path in source_list:
+            reset_variables() 
+            opt.source = source_path
+            run(**vars(opt))
 
 
 if __name__ == "__main__":
