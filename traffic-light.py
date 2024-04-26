@@ -1,4 +1,3 @@
-#!/usr/bin/python
 import Adafruit_BBIO.GPIO as GPIO
 import os
 import time
@@ -85,7 +84,6 @@ def pedestrian_phase():
                 GPIO.output(ped_red, GPIO.LOW)
                 time.sleep(0.5)
             GPIO.output(ped_red, GPIO.HIGH)
-            all_red = True
             time.sleep(2)
             print("End Pedestrian Phase")
             break
@@ -218,6 +216,7 @@ while True:
             GPIO.output(leds[prev_yellow], GPIO.LOW)
             GPIO.output(leds[prev_red], GPIO.HIGH)
             init_pedestrian()
+            all_red = True
 
         if GPIO.input(warning) == 1:
             init_warning()
@@ -264,10 +263,10 @@ sudo python blink.py
 sudo crontab -e
 
 6. Add the config line
-@reboot python /home/debian/traffic-light.py &
+@reboot python /var/lib/cloud9/traffic-light.py &
 
 7. Find the process
-ps aux | grep /home/debian/traffic-light.py
+ps aux | grep /var/lib/cloud9/traffic-light.py
 
 8. End the process
 sudo kill [PROCESS ID]
