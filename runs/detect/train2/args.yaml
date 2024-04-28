@@ -1,7 +1,7 @@
 task: detect
 mode: train
 model: yolov8n.pt
-data: /content/traffic-100-2/data.yaml
+data: /content/traffic-200-4/data.yaml
 epochs: 100
 patience: 50
 batch: 16
@@ -66,7 +66,7 @@ simplify: false
 opset: null
 workspace: 4
 nms: false
-lr0: 0.01
+lr0: 0.001
 lrf: 0.01
 momentum: 0.937
 weight_decay: 0.0005
