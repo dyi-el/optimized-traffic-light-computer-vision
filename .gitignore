@@ -3,10 +3,9 @@ dataset
 dataset.yaml
 
 # YOLOv8 generated files
-runs/detect/predict
-runs/detect/predict2
-runs/classify/predict
-runs/classify/predict2
+runs/detect/predict*
+runs/classify/predict*
+
 yolov8n.pt
 yolov8n-cls.pt
 

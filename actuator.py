@@ -62,7 +62,8 @@ async def pedestrian_go():
     board.digital[12].write(1)
     await asyncio.sleep(1)
     board.digital[12].write(0)
-    next_source = True
+    
+    #next_source = True
         
 async def warning_go():
     global board, next_source
@@ -77,7 +78,7 @@ async def warning_go():
     await asyncio.sleep(1)
     board.digital[7].write(0)
     
-    next_source = True
+    #next_source = True
 
 
 def reset_variables():
@@ -86,7 +87,7 @@ def reset_variables():
     global max_pedestrian_wait_time, start_pedestrian_wait_time, pedestrian_count
     global pedestrian_detected, detect_added, classify_added, next_source
     
-    max_lane_signal_time = 80
+    max_lane_signal_time = 120
     total_lane_signal_time = 0
     start_lane_time = time.time()
 
@@ -97,7 +98,7 @@ def reset_variables():
     pedestrian_detected = False
 
     detect_added = 0
-    classify_added = 10
+    classify_added = 43
     
     next_source = False
     
@@ -138,7 +139,7 @@ def next_lane_signal(detect_added, classify_added, results_cls, top5_labels, top
     
 
 def pedestrian_signal(pedestrian_count):
-    global start_pedestrian_wait_time, pedestrian_detected
+    global start_pedestrian_wait_time, pedestrian_detected, next_source
     
     if not pedestrian_detected:
         if pedestrian_count >= 3:
@@ -154,6 +155,9 @@ def pedestrian_signal(pedestrian_count):
         if max_pedestrian_wait_time <= pedestrian_elapsed_time or pedestrian_count > 7:
             #cv2.putText(frame,"Pedestrian Go", (600, 300), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 0), 2)
             asyncio.run(pedestrian_go())
+            next_source = True
+            time.sleep(3)
+            asyncio.run(next_lane_go())
 
 
 def mouse_callback(event, x, y, flags, param):
@@ -253,25 +257,25 @@ def run(
 
         if results[0].boxes.id is not None:
             boxes = results[0].boxes.xyxy.cpu()
-            track_ids = results[0].boxes.id.int().cpu().tolist()
+            #track_ids = results[0].boxes.id.int().cpu().tolist()
             clss = results[0].boxes.cls.cpu().tolist()
 
             annotator = Annotator(frame, line_width=line_thickness, example=str(names))
             
             classes_with_multiplier = {'bicycle': 0, 'bus': 0, 'car': 0, 'motorcycle': 0, 'truck': 0}
 
-            for box, track_id, cls in zip(boxes, track_ids, clss):
+            for box, cls in zip(boxes, clss):
                 
                 annotator.box_label(box, str(names[cls]), color=colors(cls, True))
                 bbox_center = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2  # Bbox center
-
+                '''
                 track = track_history[track_id]  # Tracking Lines plot
                 track.append((float(bbox_center[0]), float(bbox_center[1])))
                 if len(track) > 30:
                     track.pop(0)
                 points = np.hstack(track).astype(np.int32).reshape((-1, 1, 2))
                 cv2.polylines(frame, [points], isClosed=False, color=colors(cls, True), thickness=track_thickness)
-                
+                '''
                 # Check if detection inside rectangle region
                 for region in counting_regions:
                     if region["name"] == "Multiplier Region" and region["polygon"].contains(Point((bbox_center[0], bbox_center[1]))):
@@ -379,12 +383,14 @@ def parse_opt():
 def main(opt):
     """Main function."""
     # List of source paths
+
     source_list = [
         "traffic-view/Paseo-1.mp4",
         "traffic-view/Paseo-2.mp4",
         "traffic-view/Paseo-3.mp4",
         "traffic-view/Paseo-4.mp4"
     ]
+    
     while True:
         for source_path in source_list:
             reset_variables() 
