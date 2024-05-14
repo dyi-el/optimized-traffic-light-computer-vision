@@ -1,4 +1,4 @@
-# Optimized Traffic Light with Computer Vision
+# Optimized Traffic Light with YOLOv8
 ![Static Badge](https://img.shields.io/badge/status-Work_in_Progress-blue)
 
 Designing an Optimized Traffic Light Control System using a hybrid of Image Classification and Object Detection
