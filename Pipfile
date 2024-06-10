@@ -16,6 +16,8 @@ matplotlib = "*"
 pandas = "*"
 scipy = "*"
 pyfirmata = "*"
+numpy = "*"
+shapely = "*"
 
 [dev-packages]
 ipykernel = "*"
